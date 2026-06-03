@@ -1,26 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Bell, Calendar, TrendingUp, AlertCircle, PlusCircle } from 'lucide-react';
+import { Users, Bell, Calendar, TrendingUp, AlertCircle, PlusCircle, Video } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card, CardBody, CardHeader } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { CollaborationRequestCard } from '../../components/collaboration/CollaborationRequestCard';
 import { InvestorCard } from '../../components/investor/InvestorCard';
+import { VideoCallChamber } from '../../components/VideoCallChamber'; // Import the WebRTC component
 import { useAuth } from '../../context/AuthContext';
 import { CollaborationRequest } from '../../types';
 import { getRequestsForEntrepreneur } from '../../data/collaborationRequests';
 import { investors } from '../../data/users';
+import axios from 'axios';
+
+interface BackendMeeting {
+  _id: string;
+  title: string;
+  description?: string;
+  host: { _id: string; name: string; email: string };
+  attendee: { _id: string; name: string; email: string };
+  startTime: string;
+  endTime: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  roomId: string;
+}
 
 export const EntrepreneurDashboard: React.FC = () => {
   const { user } = useAuth();
   const [collaborationRequests, setCollaborationRequests] = useState<CollaborationRequest[]>([]);
   const [recommendedInvestors, setRecommendedInvestors] = useState(investors.slice(0, 3));
   
+  // Real-time backend meeting state managers
+  const [meetings, setMeetings] = useState<BackendMeeting[]>([]);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [loadingMeetings, setLoadingMeetings] = useState(true);
+
   useEffect(() => {
     if (user) {
-      // Load collaboration requests
+      // 1. Load collaboration requests
       const requests = getRequestsForEntrepreneur(user.id);
       setCollaborationRequests(requests);
+
+      // 2. Fetch live meeting events from MongoDB Atlas
+      const fetchLiveMeetings = async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await axios.get('http://localhost:5000/api/meetings', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setMeetings(response.data);
+        } catch (err) {
+          console.error("Error communicating with calendar backend:", err);
+        } finally {
+          setLoadingMeetings(false);
+        }
+      };
+
+      fetchLiveMeetings();
     }
   }, [user]);
   
@@ -33,8 +69,22 @@ export const EntrepreneurDashboard: React.FC = () => {
   };
   
   if (!user) return null;
+
+  // If a video room session is launched by the entrepreneur, show the call interface instead
+  if (activeRoomId) {
+    return (
+      <div className="p-4">
+        <VideoCallChamber 
+          roomId={activeRoomId} 
+          userId={user.id} 
+          onLeaveCall={() => setActiveRoomId(null)} 
+        />
+      </div>
+    );
+  }
   
   const pendingRequests = collaborationRequests.filter(req => req.status === 'pending');
+  const upcomingMeetingsCount = meetings.filter(m => m.status === 'accepted').length;
   
   return (
     <div className="space-y-6 animate-fade-in">
@@ -45,9 +95,7 @@ export const EntrepreneurDashboard: React.FC = () => {
         </div>
         
         <Link to="/investors">
-          <Button
-            leftIcon={<PlusCircle size={18} />}
-          >
+          <Button leftIcon={<PlusCircle size={18} />}>
             Find Investors
           </Button>
         </Link>
@@ -93,7 +141,7 @@ export const EntrepreneurDashboard: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm font-medium text-accent-700">Upcoming Meetings</p>
-                <h3 className="text-xl font-semibold text-accent-900">2</h3>
+                <h3 className="text-xl font-semibold text-accent-900">{upcomingMeetingsCount}</h3>
               </div>
             </div>
           </CardBody>
@@ -113,6 +161,52 @@ export const EntrepreneurDashboard: React.FC = () => {
           </CardBody>
         </Card>
       </div>
+
+      {/* Live Calendar Timeline Feed */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-medium text-gray-900">Your Scheduled Pitch Sessions</h2>
+        </CardHeader>
+        <CardBody>
+          {loadingMeetings ? (
+            <p className="text-gray-500 text-sm">Syncing secure boardroom times...</p>
+          ) : meetings.length > 0 ? (
+            <div className="divide-y divide-gray-200">
+              {meetings.map((meeting) => (
+                <div key={meeting._id} className="py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 text-sm">{meeting.title}</h4>
+                    <p className="text-xs text-gray-500">
+                      With: {meeting.host._id === user.id ? meeting.attendee.name : meeting.host.name}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {new Date(meeting.startTime).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    {meeting.status === 'accepted' ? (
+                      <Button 
+                        size="sm" 
+                        variant="primary" 
+                        className="bg-green-600 hover:bg-green-700 text-white text-xs flex items-center gap-1"
+                        onClick={() => setActiveRoomId(meeting.roomId)}
+                      >
+                        <Video size={14} /> Join Call Room
+                      </Button>
+                    ) : (
+                      <Badge variant={meeting.status === 'rejected' ? 'danger' : 'gray'}>
+                        {meeting.status}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm text-center py-4">No scheduled boardroom calls listed yet.</p>
+          )}
+        </CardBody>
+      </Card>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Collaboration requests */}
