@@ -35,14 +35,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(savedToken);
       setUser({ name: savedName, email: '', role: savedRole });
     }
-  } , []);
+  }, []);
 
   const login = async (email: string, password: string, role: UserRole) => {
     try {
       // Send matching body keys directly to our express auth controller endpoint
       const response = await axios.post(`${API_URL}/login`, { email, password });
       
-      const { token: receivedToken, role: receivedRole, name } = response.data;
+      // FIX: Destructure the top-level token and the nested user object directly from response.data
+      const { token: receivedToken, user: receivedUser } = response.data;
+
+      // Extract details cleanly from the inner user object structure
+      const receivedRole = receivedUser.role as UserRole;
+      const name = receivedUser.name;
 
       // Safety check: verify user is signing into the context profile they selected on screen
       if (receivedRole !== role) {
@@ -58,7 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser({ name, email, role: receivedRole });
     } catch (error: any) {
       // Intercept express server messages or fallback to default
-      const serverMessage = error.response?.data?.message || 'Failed to authenticate with server.';
+      const serverMessage = error.response?.data?.message || error.message || 'Failed to authenticate with server.';
       throw new Error(serverMessage);
     }
   };
