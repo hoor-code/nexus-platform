@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const DocumentSchema = new mongoose.Schema({
   title: { type: String, required: true },
-  filePath: { type: String, required: true }, // Local path string pointing to where the file is stored
+  filePath: { type: String, required: true }, 
   uploadedBy: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
@@ -13,7 +13,7 @@ const DocumentSchema = new mongoose.Schema({
     enum: ['pending', 'signed'], 
     default: 'pending' 
   },
-  signatureData: { type: String, default: '' } // Base64 string image representation of the electronic signature capture
+  signatureData: { type: String, default: '' } 
 }, { timestamps: true });
 
 module.exports = mongoose.model('Document', DocumentSchema);

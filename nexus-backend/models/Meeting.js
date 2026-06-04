@@ -20,7 +20,7 @@ const MeetingSchema = new mongoose.Schema({
     enum: ['pending', 'accepted', 'rejected'], 
     default: 'pending' 
   },
-  roomId: { type: String, required: true } // Room ID to link directly with WebRTC video calling later
+  roomId: { type: String, required: true } 
 }, { timestamps: true });
 
 module.exports = mongoose.model('Meeting', MeetingSchema);
